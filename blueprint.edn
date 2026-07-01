@@ -1,0 +1,10 @@
+{:itonami.blueprint/id "cloud-itonami-isco-4321"
+ :itonami.blueprint/name "Independent Warehouse Stock Operations"
+ :itonami.blueprint/isco-08 "4321"
+ :itonami.blueprint/domain :logistics/warehouse-stock
+ :itonami.blueprint/license "AGPL-3.0-or-later"
+ :itonami.blueprint/social-impact [:local-jobs :supply-reliability :waste-reduction]
+ :itonami.blueprint/governor :warehouse-stock-governor
+ :itonami.blueprint/robotics true
+ :itonami.blueprint/required-technologies [:robotics :forms :telemetry :optimization :audit-ledger :bpmn]
+ :itonami.blueprint/status :public-oss}
