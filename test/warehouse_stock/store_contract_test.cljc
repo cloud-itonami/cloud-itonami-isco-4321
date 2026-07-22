@@ -1,0 +1,56 @@
+(ns warehouse-stock.store-contract-test
+  "MemStore ≡ DatomicStore parity for the Store protocol — proves the
+  backend swap (ADR-2607011000 injection boundary) is real: the same
+  sequence of operations against either backend produces the same
+  observable results. Mirrors `officer-admin.store-contract-test`
+  (cloud-itonami-isco-0110) / `nco-admin.store-contract-test`
+  (cloud-itonami-isco-0210)."
+  (:require [clojure.test :refer [deftest is testing]]
+            [warehouse-stock.store :as store]))
+
+(defn- exercise [s]
+  (store/register-sku! s {:sku-id "sku-1" :name "widget" :expected-qty 100})
+  (store/register-bin! s {:bin-id "bin-1" :zone "A"})
+  (store/record-event! s {:event-id "e1" :sku-id "sku-1" :bin-id "bin-1"
+                           :kind :receive :qty 10 :status :committed})
+  (store/record-event! s {:event-id "e2" :sku-id "sku-1" :bin-id "bin-1"
+                           :kind :pick :qty -3 :status :committed})
+  (store/record-event! s {:event-id "e3" :sku-id "no-such-sku" :bin-id "bin-1"
+                           :kind :pick :qty -1 :status :held
+                           :violations [{:rule :no-sku-or-bin}]})
+  {:sku (store/sku s "sku-1")
+   :bin (store/bin s "bin-1")
+   :absent-sku (store/sku s "no-such-sku")
+   :absent-bin (store/bin s "no-such-bin")
+   :events-of-sku (store/events-of s "sku-1")
+   :all-events (store/events s)})
+
+(deftest mem-and-datomic-parity
+  (testing "same operations against MemStore and DatomicStore observe the same results"
+    (let [mem (exercise (store/mem-store))
+          dat (exercise (store/datomic-store))]
+      (is (= "widget" (:name (:sku mem))))
+      (is (= "widget" (:name (:sku dat))))
+      (is (= 100 (:expected-qty (:sku mem))))
+      (is (= 100 (:expected-qty (:sku dat))))
+      (is (= "A" (:zone (:bin mem))))
+      (is (= "A" (:zone (:bin dat))))
+      (is (nil? (:absent-sku mem)))
+      (is (nil? (:absent-sku dat)))
+      (is (nil? (:absent-bin mem)))
+      (is (nil? (:absent-bin dat)))
+      (is (= 2 (count (:events-of-sku mem))) "sku-1's own events, excludes the no-such-sku held fact")
+      (is (= 2 (count (:events-of-sku dat))))
+      (is (= (:events-of-sku mem) (:events-of-sku dat)))
+      (is (= 3 (count (:all-events mem))) "the FULL ledger includes the held fact too")
+      (is (= 3 (count (:all-events dat))))
+      (is (= (:all-events mem) (:all-events dat)))
+      (is (= :held (:status (nth (:all-events mem) 2))))
+      (is (= :held (:status (nth (:all-events dat) 2)))))))
+
+(deftest datomic-store-nil-lookups
+  (testing "unregistered sku/bin lookups are nil on the DatomicStore too"
+    (let [dat (store/datomic-store)]
+      (is (nil? (store/sku dat "no-such-sku")))
+      (is (nil? (store/bin dat "no-such-bin")))
+      (is (empty? (store/events dat))))))
