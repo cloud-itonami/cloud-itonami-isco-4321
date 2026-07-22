@@ -1,1 +1,42 @@
-[{:itonami.blueprint/social-impact [:local-jobs :supply-reliability :waste-reduction], :itonami.blueprint/domain :logistics/warehouse-stock, :itonami.blueprint/required-technologies [:robotics :forms :telemetry :optimization :audit-ledger :bpmn], :itonami.blueprint/isco-08 "4321", :itonami.blueprint/name "Independent Warehouse Stock Operations", :itonami.blueprint/governor :warehouse-stock-governor, :itonami.blueprint/robotics true, :db/id -1, :itonami.blueprint/status :public-oss, :itonami.blueprint/id "cloud-itonami-isco-4321", :itonami.blueprint/license "AGPL-3.0-or-later", :itonami.blueprint/maturity :blueprint}]
+[{:itonami.blueprint/social-impact [:local-jobs :supply-reliability :waste-reduction]
+  :itonami.blueprint/domain :logistics/warehouse-stock
+  :itonami.blueprint/required-technologies [:robotics :forms :telemetry :optimization :audit-ledger :bpmn]
+  :itonami.blueprint/isco-08 "4321"
+  :itonami.blueprint/name "Independent Warehouse Stock Operations"
+  :itonami.blueprint/governor :warehouse-stock-governor
+  :itonami.blueprint/robotics true
+  :db/id -1
+  :itonami.blueprint/status :public-oss
+  :itonami.blueprint/maturity :implemented
+  :itonami.blueprint/implemented-slice
+  "Stock Advisor ⊣ Warehouse Stock Governor, a REAL compiled
+  `kotoba-lang/langgraph` StateGraph (`:intake -> :advise -> :govern
+  -> :decide -+-> :commit / :request-approval -> :commit / :hold`),
+  append-only audit ledger. Replaces a prior state with NO StateGraph
+  wiring whatsoever: there was no `actor.cljc` at all, `deps.edn` had
+  an empty top-level `:deps {}` (langgraph wasn't even declared), and
+  no `advisor.cljc` (no mock/LLM injection boundary existed). The
+  repo's `warehouse-stock.governor` (discrepancy-threshold +
+  sku/bin-provenance checks) and `warehouse-stock.store`
+  (`record-event!`) were real but only ever exercised by tests, never
+  by a running actor. Now: a genuine `interrupt-before
+  #{:request-approval}` + in-memory checkpointer pauses
+  `:human-approval` verdicts for real human sign-off (`approve!`
+  resumes the SAME compiled graph via the graph's own
+  `:request-approval -> :commit` edge, not a hand-rolled parallel
+  commit path), and BOTH `:commit` and `:hold` durably append to the
+  real audit ledger (`store/record-event!`) — a held HARD-violation
+  proposal is now also queryable audit history via the store's new
+  `events` accessor, not silently discarded. Store gained a
+  `DatomicStore` (via `kotoba-lang/langchain-store`, no hand-rolled
+  EDN-blob codec) alongside `MemStore`, proven ≡ by a new
+  store-contract test. Three ops (`:receive` / `:pick` / `:count`),
+  all `:effect :propose` only. HARD invariants (unregistered sku/bin,
+  non-`:propose` effect, a `:count` event whose discrepancy from the
+  sku's `expected-qty` exceeds `discrepancy-threshold` at below
+  `:high` safety-class) always `:hold` — a large discrepancy can never
+  be auto-corrected, only recorded and escalated; low-confidence
+  proposals also require human sign-off. 14 tests / 63 assertions
+  green, clj-kondo 0 errors."
+  :itonami.blueprint/id "cloud-itonami-isco-4321"
+  :itonami.blueprint/license "AGPL-3.0-or-later"}]

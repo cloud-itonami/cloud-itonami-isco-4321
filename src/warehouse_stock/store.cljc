@@ -2,23 +2,48 @@
   "SSoT for the ISCO-08 4321 independent warehouse-stock sole-proprietor
   actor, behind a `Store` protocol so the backend is a swap (MemStore
   default ‖ a real Datomic/kotoba-server backend, per the itonami actor
-  pattern).
+  pattern, ADR-2607011000).
 
   Domain = independent warehouse stock operations:
 
     sku    — a stocked product (skuId, name, expectedQty)
     bin    — a storage location (binId, zone)
     event  — a stock movement (eventId, skuId, binId, kind
-              #{:receive :pick :count}, qty)
+              #{:receive :pick :count}, qty), OR a governance-decision
+              audit fact appended by `warehouse-stock.actor`'s `:hold`
+              node (kind #{:held}, carrying :violations) — see `events`.
 
-  The append-only records are the operating ledger: a stock event must
-  reference a registered sku and a registered bin, and events are never
-  mutated in place, only appended.")
+  Two backends implement the same `Store` protocol so the backend is a
+  swap, not a rewrite:
+
+    - `MemStore`     — an atom of plain maps. The deterministic
+                       default for dev/tests/demo (no deps).
+    - `DatomicStore` — backed by `langchain.db`, a Datomic-API-
+                       compatible EAV store (swappable to a
+                       kotoba-server pod in production). Sku/bin
+                       records and events carry free-form fields, so
+                       each is stored as an EDN-blob payload via
+                       `langchain-store.core` (`ls/enc`/`ls/dec*`), not
+                       a hand-rolled codec (ADR-2607141600).
+
+  Both pass the same contract (test/warehouse_stock/store_contract_test.cljc).
+
+  `events`/`record-event!` is the append-only audit ledger: a stock
+  event must reference a registered sku and a registered bin, and
+  events are never mutated in place, only appended. Prior to this,
+  `record-event!` was only ever called from `governor_test.clj` —
+  `warehouse-stock.actor` did not exist at all, so nothing in this
+  actor's own runtime ever wrote to it."
+  (:require [langchain.db :as d]
+            [langchain-store.core :as ls]))
 
 (defprotocol Store
   (sku [st sku-id])
   (bin [st bin-id])
   (events-of [st sku-id])
+  (events [st]
+    "All events in append order — the full audit ledger, unfiltered by
+    sku (see `events-of` for the per-sku view).")
   (register-sku! [st sku])
   (register-bin! [st bin])
   (record-event! [st event]))
@@ -31,6 +56,8 @@
     (get-in @state [:bins bin-id]))
   (events-of [_ sku-id]
     (filter #(= sku-id (:sku-id %)) (:events @state)))
+  (events [_]
+    (:events @state))
   (register-sku! [_ sku]
     (swap! state assoc-in [:skus (:sku-id sku)] sku))
   (register-bin! [_ bin]
@@ -42,3 +69,49 @@
   ([] (mem-store {}))
   ([seed]
    (->MemStore (atom (merge {:skus {} :bins {} :events []} seed)))))
+
+;; ----------------------------- DatomicStore (langchain.db) -----------------------------
+
+(def ^:private schema
+  "DataScript/Datomic-style schema: only constraint attrs are declared.
+  `:sku/payload`/`:bin/payload` are opaque EDN-string blobs (via
+  `langchain-store.core`) so `langchain.db` doesn't try to expand a
+  caller-defined sku/bin record into sub-entities — same convention as
+  `officer-admin.store`'s `:officer/payload` (cloud-itonami-isco-0110)."
+  (ls/identity-schema [:sku/id :bin/id :event/seq]))
+
+(defn- blob-lookup
+  "Look up the EDN-blob payload for the entity uniquely identified by
+  `id-attr`/`id` and stored under `payload-attr`."
+  [conn id-attr payload-attr id]
+  (when id
+    (ls/dec* (d/q {:find '[?p .] :in '[$ ?id]
+                   :where [['?e id-attr '?id] ['?e payload-attr '?p]]}
+                  (d/db conn) id))))
+
+(defrecord DatomicStore [conn]
+  Store
+  (sku [_ sku-id]
+    (blob-lookup conn :sku/id :sku/payload sku-id))
+  (bin [_ bin-id]
+    (blob-lookup conn :bin/id :bin/payload bin-id))
+  (events-of [st sku-id]
+    (filter #(= sku-id (:sku-id %)) (events st)))
+  (events [_]
+    (ls/read-stream conn :event/seq :event/payload))
+  (register-sku! [s sku]
+    (d/transact! conn [{:sku/id (:sku-id sku) :sku/payload (ls/enc sku)}])
+    s)
+  (register-bin! [s bin]
+    (d/transact! conn [{:bin/id (:bin-id bin) :bin/payload (ls/enc bin)}])
+    s)
+  (record-event! [s event]
+    (ls/append-blob! conn :event/seq :event/payload (count (events s)) event)
+    s))
+
+(defn datomic-store
+  "Create a new DatomicStore (langchain.db-backed) for warehouse-stock
+  skus/bins/events — the production-shaped backend for the same
+  `Store` protocol `mem-store`'s `MemStore` implements."
+  []
+  (->DatomicStore (d/create-conn schema)))
