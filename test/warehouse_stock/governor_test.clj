@@ -71,3 +71,17 @@
     (store/record-event! st {:event-id "e1" :sku-id "sku-1" :bin-id "bin-1" :kind :receive :qty 10})
     (store/record-event! st {:event-id "e2" :sku-id "sku-1" :bin-id "bin-1" :kind :pick :qty -3})
     (is (= 2 (count (store/events-of st "sku-1"))))))
+
+(deftest a-proposal-without-confidence-does-not-proceed
+  (testing "確信度を言っていない提案は、確信していると言っていないので auto-proceed
+            させない。この既定は 2026-07-30 まで 1.0 で、:confidence を持たない提案が
+            :proceed していた（ADR-2607309100）。fleet の boolean 方言 346 件はすべて
+            0.0 既定で、うち isco-5419 はそれを明示的にテストしている。"
+    (let [st (fresh-store)
+          env (governor/env-for-store st)
+          proposal {:kind :receive :sku-id "sku-1" :bin-id "bin-1" :qty 10 :safety-class :low :effect :propose}
+          result (governor/assess env proposal)]
+      (is (= 0.0 (:confidence result))
+          "欠落した :confidence は 0.0 であって 1.0 ではない")
+      (is (not= :proceed (:decision result))
+          "確信度不明の提案が自動で通ってはならない"))))
