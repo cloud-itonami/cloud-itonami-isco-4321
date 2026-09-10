@@ -58,7 +58,7 @@ this, the repo had a real, substantive `warehouse-stock.governor`
 all — no StateGraph wiring whatsoever — `deps.edn` had an empty
 top-level `:deps {}` (langgraph wasn't even declared as a dependency),
 and NO `advisor.cljc` (no mock/LLM injection boundary existed). That
-gap is now closed (`test/warehouse_stock/actor_test.cljc`).
+gap is now closed (`test/warehouse_stock/actor_test.kotoba`).
 
 ```text
 :intake -> :advise -> :govern -> :decide -+-> :commit                       (:proceed)
@@ -66,20 +66,20 @@ gap is now closed (`test/warehouse_stock/actor_test.cljc`).
                                            +-> :hold                         (:hold)
 ```
 
-- `src/warehouse_stock/store.cljc` — `Store` protocol + `MemStore` +
+- `src/warehouse_stock/store.kotoba` — `Store` protocol + `MemStore` +
   `DatomicStore` (via [`kotoba-lang/langchain-store`](https://github.com/kotoba-lang/langchain-store),
   no hand-rolled EDN-blob codec): skus, bins, and the append-only
   audit ledger (`record-event!`/`events`/`events-of`). An event can
   only be recorded against a registered sku and a registered bin
   (sku/bin provenance). Both backends pass the same contract
-  (`test/warehouse_stock/store_contract_test.cljc`).
-- `src/warehouse_stock/advisor.cljc` — `Advisor` protocol; `mock-advisor`
+  (`test/warehouse_stock/store_contract_test.kotoba`).
+- `src/warehouse_stock/advisor.kotoba` — `Advisor` protocol; `mock-advisor`
   (deterministic, default) proposes a receive/pick/count operation from
   a request; `llm-advisor` wraps a `langchain.model/ChatModel` — either
   way the advisor only ever produces a `:propose`-effect proposal,
   never a direct store write, and LLM parse failures always yield
   `confidence 0.0` (forces escalation, never fabricated confidence).
-- `src/warehouse_stock/governor.cljc` — `WarehouseStockGovernor`:
+- `src/warehouse_stock/governor.kotoba` — `WarehouseStockGovernor`:
   `assess` gates a proposal against the sku/bin env, wired as its own
   `:govern` node. Hard invariants force `:hold` (no sku/bin,
   direct-write instead of `:propose`, or a `:count` event whose
@@ -92,7 +92,7 @@ gap is now closed (`test/warehouse_stock/actor_test.cljc`).
   graph via its own `:request-approval -> :commit` edge); it can never
   be auto-corrected, only recorded and escalated. Low-confidence
   proposals also require human sign-off.
-- `src/warehouse_stock/actor.cljc` — `build-graph`, `run-request!`,
+- `src/warehouse_stock/actor.kotoba` — `build-graph`, `run-request!`,
   `approve!`: the REAL `langgraph.graph/state-graph` wiring
   (`state-graph`/`add-node`/`add-edge`/`add-conditional-edges`/
   `compile-graph`). BOTH `:commit` and `:hold` durably append to the
