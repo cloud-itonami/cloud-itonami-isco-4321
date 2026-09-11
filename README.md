@@ -101,8 +101,8 @@ gap is now closed (`test/warehouse_stock/actor_test.cljk`).
   by a running actor (there was no actor).
 
 ```bash
-clojure -M:lint       # clj-kondo, 0 errors
-clojure -M:dev:test    # 14 tests / 63 assertions, green
+kbb -M:lint       # clj-kondo, 0 errors
+kbb -M:dev:test    # 14 tests / 63 assertions, green
 ```
 
 This is what backs this repo's `:maturity :implemented` entry in
