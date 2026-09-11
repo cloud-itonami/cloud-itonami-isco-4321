@@ -26,7 +26,7 @@
                        `langchain-store.core` (`ls/enc`/`ls/dec*`), not
                        a hand-rolled codec (ADR-2607141600).
 
-  Both pass the same contract (test/warehouse_stock/store_contract_test.cljc).
+  Both pass the same contract (test/warehouse_stock/store_contract_test.cljk).
 
   `events`/`record-event!` is the append-only audit ledger: a stock
   event must reference a registered sku and a registered bin, and
