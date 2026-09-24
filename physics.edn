@@ -1,0 +1,43 @@
+;; What this vertical's robot physically does, declared for
+;; kotoba.robotics.process (kotoba-lang/robotics). `kbb -M:dev:physics` runs it.
+;;
+;; README "Robotics premise": a pallet-mover and inventory-scanning robot
+;; performs the stock clerk's receiving, shelving, picking and cycle counts.
+;; Declared here: the pallet leg from the receiving dock to the rack aisle,
+;; the same mover braking hard with a tall pallet on its forks, and a carton
+;; picked from a tote onto a shelf.
+;;
+;; Every number without a cited source is marked `estimate` in its :basis.
+;; Replacing an estimate with a sourced value is this bot's growth work.
+{:physics/schema "itonami.physical-ai.spec.v1"
+ :repo "cloud-itonami/cloud-itonami-isco-4321"
+ :cases
+ [{:id :pallet-dock-to-aisle
+   :kind :transport
+   :procedure "pallet-mover carries a received pallet from the dock door to its rack aisle"
+   :params {:mass-kg 250.0 :distance-m 50.0 :v-max-mps 1.2 :a-max-mps2 0.4
+            :brake-decel-mps2 0.8 :drive-force-n 600.0 :crr 0.015
+            :cog-height-m 0.90 :support-half-length-m 0.60}
+   :sweep {:param :payload-kg :values [100.0 300.0 600.0 900.0 1200.0]}
+   :quantity :cycle-time-s
+   :limit {:max 50.0 :basis "estimate: one dock-to-aisle leg per putaway so a 20-pallet inbound clears within the receiving window"}
+   :boundary {:lo 10.0 :hi 3000.0}}
+  {:id :tall-pallet-hard-stop
+   :kind :transport
+   :procedure "pallet-mover stops for a person stepping into the aisle with a tall pallet raised on its forks"
+   :params {:mass-kg 250.0 :payload-kg 600.0 :distance-m 20.0 :v-max-mps 1.2 :a-max-mps2 0.4
+            :drive-force-n 600.0 :crr 0.015
+            :cog-height-m 1.30 :support-half-length-m 0.60}
+   :sweep {:param :brake-decel-mps2 :values [0.5 1.0 2.0 3.0 4.0]}
+   :quantity :min-tipover-margin
+   :limit {:min 0.25 :basis "estimate: keep a quarter of the static tip-over moment in reserve for floor unevenness and load shift"}
+   :boundary {:lo 0.3 :hi 6.0}}
+  {:id :carton-tote-to-shelf
+   :kind :manipulator
+   :procedure "arm picks a carton from the inbound tote and places it on a shelf bay"
+   :params {:l1-m 0.60 :l2-m 0.50 :m1-kg 6.0 :m2-kg 4.0
+            :from [0.70 0.00] :to [0.30 0.90] :duration-s 2.5 :steps 500}
+   :sweep {:param :payload-kg :values [2.0 5.0 8.0 12.0 16.0]}
+   :quantity :peak-tau1-nm
+   :limit {:max 150.0 :basis "estimate: continuous shoulder torque of a ~15 kg-payload collaborative arm"}
+   :boundary {:lo 0.5 :hi 40.0}}]}
