@@ -5,7 +5,7 @@
   observable results. Mirrors `officer-admin.store-contract-test`
   (cloud-itonami-isco-0110) / `nco-admin.store-contract-test`
   (cloud-itonami-isco-0210)."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [warehouse-stock.store :as store]))
 
 (defn- exercise [s]

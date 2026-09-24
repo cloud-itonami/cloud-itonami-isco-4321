@@ -9,7 +9,7 @@
   Advisor/mock injection boundary at all. These tests close that gap
   and prove the audit ledger (`warehouse-stock.store/record-event!`)
   is genuinely wired into the `:commit`/`:hold` nodes."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [warehouse-stock.actor :as actor]
             [warehouse-stock.advisor :as advisor]
             [warehouse-stock.store :as store]))
