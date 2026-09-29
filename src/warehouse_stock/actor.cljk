@@ -1,6 +1,6 @@
 (ns warehouse-stock.actor
   "Stock Actor — the ISCO-08 4321 independent warehouse-stock actor as
-  a REAL `langgraph.graph/state-graph` (per ADR-2607011000 / CLAUDE.md
+  a REAL `langgraph.graph/state-graph` (per ADR-2607011000 / AGENTS.md
   Actors section). One graph run = one stock operation request
   (receive/pick/count): intake -> advise -> govern -> decide ->
   commit/hold, with a GENUINE `interrupt-before` human-approval gate
